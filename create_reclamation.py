@@ -38,7 +38,7 @@ class CreateReclamationWindow:
         # Словарь для хранения переменных полей
         self.vars = {}
         
-        # Создаем status_var ДО загрузки данных
+        # Создаем status_var
         self.status_var = tk.StringVar(value="⏳ Загрузка данных...")
         
         # Создаем виджеты
@@ -54,6 +54,9 @@ class CreateReclamationWindow:
         
         # Настройка горячих клавиш
         self.setup_bindings()
+        
+        # ✅ Устанавливаем фокус на окно при создании
+        self.root.focus_force()
     
     def setup_styles(self):
         """Настройка стилей"""
@@ -78,11 +81,11 @@ class CreateReclamationWindow:
         title.pack(side='left')
         
         # Кнопки в верхней панели
-        ttk.Button(top_frame, text="🔄 Обновить справочники", 
-                  command=self.refresh_reference_data).pack(side='right', padx=10)
+        btn_frame = ttk.Frame(top_frame)
+        btn_frame.pack(side='right')
         
-        ttk.Button(top_frame, text="📋 Список рекламаций", 
-                  command=self.open_list_window).pack(side='right', padx=10)
+        ttk.Button(btn_frame, text="🔄 Обновить справочники", 
+                  command=self.refresh_reference_data).pack(side='left', padx=5)
         
         # Контейнер для полей ввода (две колонки)
         fields_container = ttk.Frame(main_frame)
@@ -109,11 +112,46 @@ class CreateReclamationWindow:
             ('full_pir_number', 'Номер PIR', 'entry', None),
             ('repetition', 'Повторяемость', 'entry', None),
             ('ncr_status', 'Статус NCR', 'combobox', config.NCR_STATUSES),
+            ('failure_quantity', 'Количество отказов', 'entry', None),
+            ('vin', 'VIN номер', 'entry', None),
+            ('defect', 'Дефект', 'entry', None),
         ]
         
         # Создаем поля на левой панели
         for key, label, widget_type, values in left_fields:
             self._create_field(left_frame, key, label, widget_type, values)
+        
+        # Поле Cutoff (выбор даты)
+        cutoff_frame = ttk.Frame(left_frame)
+        cutoff_frame.pack(fill='x', pady=5)
+        
+        ttk.Label(cutoff_frame, text="Cutoff дата:", style="Field.TLabel", 
+                  width=20, anchor='e').pack(side='left', padx=(0, 10))
+        
+        self.vars['cutoff'] = tk.StringVar()
+        self.cutoff_entry = ttk.Entry(cutoff_frame, textvariable=self.vars['cutoff'], width=30)
+        self.cutoff_entry.pack(side='left', fill='x', expand=True)
+        
+        ttk.Button(cutoff_frame, text="📅 Выбрать дату", 
+                  command=self.choose_cutoff_date).pack(side='left', padx=5)
+        
+        # Чекбокс Report 8D
+        checkbox_frame = ttk.Frame(left_frame)
+        checkbox_frame.pack(fill='x', pady=5)
+        
+        # Пустая метка для выравнивания
+        ttk.Label(checkbox_frame, text="", width=20, anchor='e').pack(side='left', padx=(0, 10))
+        
+        # Переменная для чекбокса
+        self.vars['report8d_checkbox'] = tk.BooleanVar(value=False)
+        
+        # Чекбокс
+        self.report8d_checkbox = ttk.Checkbutton(
+            checkbox_frame,
+            text="✅ Report 8D требуется",
+            variable=self.vars['report8d_checkbox']
+        )
+        self.report8d_checkbox.pack(side='left', anchor='w')
         
         # Поле для описания (многострочное)
         desc_frame = ttk.LabelFrame(left_frame, text="Описание проблемы", padding=10)
@@ -121,6 +159,13 @@ class CreateReclamationWindow:
         
         self.description_text = tk.Text(desc_frame, height=6, font=('Arial', 10), wrap='word')
         self.description_text.pack(fill='both', expand=True)
+        
+        # Поле для комментариев (многострочное)
+        comments_frame = ttk.LabelFrame(left_frame, text="Комментарии", padding=10)
+        comments_frame.pack(fill='both', expand=True, pady=(10, 0))
+        
+        self.comments_text = tk.Text(comments_frame, height=3, font=('Arial', 10), wrap='word')
+        self.comments_text.pack(fill='both', expand=True)
         
         # ==================== ПРАВАЯ КОЛОНКА (Галерея) ====================
         
@@ -172,6 +217,14 @@ class CreateReclamationWindow:
         self.canvas.create_window((0, 0), window=self.gallery_frame, anchor='nw')
         
         self.gallery_frame.bind('<Configure>', self._on_gallery_configure)
+        
+        # Нижняя панель с кнопкой Сохранить
+        bottom_btn_frame = ttk.Frame(main_frame)
+        bottom_btn_frame.pack(fill='x', pady=(10, 0))
+        
+        ttk.Button(bottom_btn_frame, text="💾 Сохранить (Ctrl+S)", 
+                  command=self.save_reclamation,
+                  style="Accent.TButton").pack(side='left', padx=5)
     
     def _on_gallery_configure(self, event):
         """Обновляет область прокрутки при изменении размера галереи"""
@@ -230,6 +283,88 @@ class CreateReclamationWindow:
             if matches:
                 widget['values'] = matches
     
+    def choose_cutoff_date(self):
+        """Открывает диалог выбора даты для cutoff"""
+        try:
+            from tkcalendar import DateEntry
+            
+            date_window = tk.Toplevel(self.root)
+            date_window.title("Выбор даты cutoff")
+            date_window.geometry("320x280")
+            date_window.transient(self.root)
+            date_window.grab_set()
+            date_window.focus_force()
+            
+            date_window.update_idletasks()
+            width = date_window.winfo_width()
+            height = date_window.winfo_height()
+            x = (date_window.winfo_screenwidth() // 2) - (width // 2)
+            y = (date_window.winfo_screenheight() // 2) - (height // 2)
+            date_window.geometry(f'{width}x{height}+{x}+{y}')
+            
+            ttk.Label(date_window, text="Выберите дату cutoff:", 
+                      font=('Arial', 12)).pack(pady=20)
+            
+            cal = DateEntry(
+                date_window, 
+                width=12, 
+                background='darkblue',
+                foreground='white',
+                borderwidth=2,
+                date_pattern='yyyy-mm-dd'
+            )
+            cal.pack(pady=20)
+            cal.focus_force()
+            
+            result = {'date': None}
+            
+            def set_date():
+                try:
+                    date_str = cal.get()
+                    if date_str:
+                        result['date'] = date_str
+                        date_window.destroy()
+                    else:
+                        messagebox.showwarning("Внимание", "Пожалуйста, выберите дату")
+                except Exception as e:
+                    messagebox.showerror("Ошибка", f"Не удалось получить дату: {e}")
+            
+            def clear_date():
+                result['date'] = ''
+                date_window.destroy()
+            
+            def cancel():
+                result['date'] = None
+                date_window.destroy()
+            
+            btn_frame = ttk.Frame(date_window)
+            btn_frame.pack(pady=10)
+            
+            ttk.Button(btn_frame, text="✅ Выбрать", command=set_date, width=12).pack(side='left', padx=5)
+            ttk.Button(btn_frame, text="🗑️ Очистить", command=clear_date, width=12).pack(side='left', padx=5)
+            ttk.Button(btn_frame, text="❌ Отмена", command=cancel, width=12).pack(side='left', padx=5)
+            
+            date_window.protocol("WM_DELETE_WINDOW", cancel)
+            self.root.wait_window(date_window)
+            
+            if result['date'] is not None:
+                if result['date'] == '':
+                    self.vars['cutoff'].set('')
+                    self.status_var.set("🗑️ Дата cutoff очищена")
+                else:
+                    self.vars['cutoff'].set(result['date'])
+                    self.status_var.set(f"✅ Дата cutoff выбрана: {result['date']}")
+                
+        except ImportError:
+            messagebox.showinfo(
+                "Информация", 
+                "Для удобного выбора даты установите библиотеку tkcalendar:\n"
+                "pip install tkcalendar\n\n"
+                "Или введите дату вручную в формате ГГГГ-ММ-ДД"
+            )
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Ошибка при выборе даты:\n{str(e)}")
+    
     def load_reference_data(self):
         """Загружает справочные данные из базы"""
         self.status_var.set("⏳ Загрузка данных из базы...")
@@ -259,6 +394,7 @@ class CreateReclamationWindow:
         rec = self.db.get_reclamation_by_id(self.rec_id)
         
         if rec:
+            # Основные поля
             self.vars['model'].set(rec.model or '')
             self.vars['commodity'].set(rec.commodity or '')
             self.vars['creator'].set(rec.creator or '')
@@ -269,8 +405,20 @@ class CreateReclamationWindow:
             self.vars['repetition'].set(rec.repetition or '')
             self.vars['ncr_status'].set(rec.ncr_status or '')
             
+            # Числовые поля
+            self.vars['failure_quantity'].set(str(rec.failure_quantity) if rec.failure_quantity else '')
+            self.vars['vin'].set(rec.vin or '')
+            
+            # Новые поля
+            self.vars['defect'].set(rec.defect or '')
+            self.vars['cutoff'].set(rec.cutoff.strftime('%Y-%m-%d') if rec.cutoff else '')
+            self.vars['report8d_checkbox'].set(rec.report8d_checkbox or False)
+            
+            # Текстовые поля
             if rec.description:
                 self.description_text.insert('1.0', rec.description)
+            if rec.comments:
+                self.comments_text.insert('1.0', rec.comments)
             
             self.status_var.set(f"✅ Рекламация #{self.rec_id} загружена для редактирования")
         else:
@@ -288,9 +436,10 @@ class CreateReclamationWindow:
                 files = os.listdir(folder_path)
                 for file in files:
                     full_path = os.path.join(folder_path, file)
-                    self.attached_files.append(file)
-                    self.file_paths[file] = full_path
-                    self.file_listbox.insert(tk.END, file)
+                    if os.path.isfile(full_path):  # Проверяем, что это файл, а не папка
+                        self.attached_files.append(file)
+                        self.file_paths[file] = full_path
+                        self.file_listbox.insert(tk.END, file)
                 self.render_gallery()
             except Exception as e:
                 print(f"Ошибка загрузки файлов: {e}")
@@ -303,7 +452,7 @@ class CreateReclamationWindow:
         return base_path
     
     def add_file(self):
-        """Добавляет файл к рекламации"""
+        """Добавляет файл к рекламации и копирует его в папку"""
         file_paths = filedialog.askopenfilenames(
             title="Выберите файлы для прикрепления",
             filetypes=[
@@ -325,39 +474,80 @@ class CreateReclamationWindow:
                 continue
             
             self.attached_files.append(file_name)
-            self.file_paths[file_name] = file_path
-            self.file_listbox.insert(tk.END, file_name)
             
+            # Если рекламация уже сохранена - сразу копируем в папку
             if self.rec_id:
-                self.copy_file_to_ncr_folder(file_path, file_name)
+                dest_path = self._copy_file_to_ncr_folder(file_path, file_name)
+                if dest_path:
+                    self.file_paths[file_name] = dest_path
+                else:
+                    self.file_paths[file_name] = file_path
+            else:
+                # Если рекламация еще не сохранена - сохраняем исходный путь
+                self.file_paths[file_name] = file_path
+            
+            self.file_listbox.insert(tk.END, file_name)
         
         self.render_gallery()
         self.status_var.set(f"✅ Добавлено файлов: {len(file_paths)}")
     
-    def copy_file_to_ncr_folder(self, source_path, file_name):
-        """Копирует файл в папку рекламации"""
-        folder_path = self.get_ncr_folder()
+    def _copy_file_to_ncr_folder(self, source_path, file_name):
+        """Копирует файл в папку рекламации и возвращает новый путь"""
+        if not self.rec_id:
+            return None
         
+        folder_path = self.get_ncr_folder()
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
-            print(f"📁 Создана папка: {folder_path}")
         
         dest_path = os.path.join(folder_path, file_name)
         
-        counter = 1
-        while os.path.exists(dest_path):
-            name, ext = os.path.splitext(file_name)
-            new_name = f"{name}_{counter}{ext}"
-            dest_path = os.path.join(folder_path, new_name)
-            counter += 1
+        # Если файл уже в папке рекламации - возвращаем его путь
+        if os.path.normpath(source_path) == os.path.normpath(dest_path):
+            return dest_path
+        
+        # Если файл уже существует в папке назначения - возвращаем путь к нему
+        if os.path.exists(dest_path):
+            return dest_path
         
         try:
             shutil.copy2(source_path, dest_path)
-            self.file_paths[file_name] = dest_path
             print(f"✅ Файл скопирован: {dest_path}")
+            return dest_path
         except Exception as e:
             print(f"❌ Ошибка копирования: {e}")
             messagebox.showerror("Ошибка", f"Не удалось скопировать файл:\n{e}")
+            return None
+    
+    def save_files_after_save(self):
+        """Обновляет пути к файлам после сохранения рекламации"""
+        if not self.rec_id or not self.attached_files:
+            return
+        
+        folder_path = self.get_ncr_folder()
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+        
+        # Обновляем пути к файлам
+        for file_name in list(self.attached_files):
+            source_path = self.file_paths.get(file_name)
+            if not source_path or not os.path.exists(source_path):
+                continue
+            
+            dest_path = os.path.join(folder_path, file_name)
+            
+            # Если файл еще не в папке рекламации - копируем
+            if os.path.normpath(source_path) != os.path.normpath(dest_path):
+                if not os.path.exists(dest_path):
+                    try:
+                        shutil.copy2(source_path, dest_path)
+                        self.file_paths[file_name] = dest_path
+                        print(f"✅ Файл скопирован при сохранении: {dest_path}")
+                    except Exception as e:
+                        print(f"❌ Ошибка копирования файла при сохранении: {e}")
+                else:
+                    self.file_paths[file_name] = dest_path
+                    print(f"⏭️ Файл уже существует: {dest_path}")
     
     def render_gallery(self):
         """Отображает все изображения в виде галереи миниатюр"""
@@ -557,9 +747,37 @@ class CreateReclamationWindow:
         try:
             data = {}
             for key, var in self.vars.items():
-                data[key] = var.get().strip()
+                if key == 'report8d_checkbox':
+                    data[key] = var.get()
+                else:
+                    data[key] = var.get().strip()
+            
+            # Обработка числового поля failure_quantity
+            if data.get('failure_quantity'):
+                try:
+                    data['failure_quantity'] = int(data['failure_quantity'])
+                except ValueError:
+                    messagebox.showwarning("Внимание", "Поле 'Количество отказов' должно быть числом")
+                    self.status_var.set("❌ Ошибка: неверный формат количества отказов")
+                    self.focus_window()
+                    return
+            else:
+                data['failure_quantity'] = None
+            
+            # Обработка даты cutoff
+            if data.get('cutoff'):
+                try:
+                    data['cutoff'] = datetime.strptime(data['cutoff'], '%Y-%m-%d')
+                except ValueError:
+                    messagebox.showwarning("Внимание", "Неверный формат даты cutoff. Используйте ГГГГ-ММ-ДД")
+                    self.status_var.set("❌ Ошибка: неверный формат даты")
+                    self.focus_window()
+                    return
+            else:
+                data['cutoff'] = None
             
             data['description'] = self.description_text.get('1.0', 'end-1c').strip()
+            data['comments'] = self.comments_text.get('1.0', 'end-1c').strip()
             data['date_creation'] = datetime.now()
             
             required_fields = ['model', 'partnumber', 'supplier']
@@ -574,19 +792,25 @@ class CreateReclamationWindow:
                 msg = "Заполните обязательные поля:\n" + "\n".join(f"• {field_names[f]}" for f in missing)
                 messagebox.showwarning("Внимание", msg)
                 self.status_var.set("❌ Ошибка: не заполнены обязательные поля")
+                self.focus_window()
                 return
             
             if self.edit_mode:
+                # Редактирование существующей рекламации
                 result = self.db.update_reclamation(self.rec_id, data)
                 if result['success']:
                     self.save_files_after_save()
                     messagebox.showinfo("Успех", f"✅ Рекламация #{self.rec_id} обновлена!")
                     self.status_var.set(f"✅ Рекламация #{self.rec_id} обновлена")
-                    self.open_list_window()
+                    
+                    # ✅ Возвращаем фокус через задержку после закрытия messagebox
+                    self.root.after(100, self.focus_window)
                 else:
                     messagebox.showerror("Ошибка", f"❌ {result['message']}")
                     self.status_var.set(f"❌ Ошибка: {result['message']}")
+                    self.root.after(100, self.focus_window)
             else:
+                # Создание новой рекламации
                 result = self.db.save_reclamation(data)
                 
                 if result['success']:
@@ -598,37 +822,48 @@ class CreateReclamationWindow:
                     
                     messagebox.showinfo("Успех", f"✅ Рекламация сохранена!\nID: {self.rec_id}\nНомер: {full_pir}")
                     self.status_var.set(f"✅ Рекламация #{self.rec_id} сохранена")
-                    self.clear_fields()
-                    self.refresh_reference_data()
+                    
+                    # Переключаемся в режим редактирования
                     self.edit_mode = True
                     self.root.title(f"Редактирование NCR #{self.rec_id}")
+                    
+                    # Очищаем поля для создания новой записи
+                    self.clear_fields()
+                    self.refresh_reference_data()
+                    
+                    self.status_var.set(f"✅ Рекламация #{self.rec_id} сохранена. Можете создать новую или редактировать текущую.")
+                    
+                    # ✅ Возвращаем фокус через задержку после закрытия messagebox
+                    self.root.after(100, self.focus_window)
                 else:
                     messagebox.showerror("Ошибка", f"❌ {result['message']}")
                     self.status_var.set(f"❌ Ошибка: {result['message']}")
-                
+                    self.root.after(100, self.focus_window)
+            
         except Exception as e:
             messagebox.showerror("Ошибка", f"❌ Ошибка при сохранении:\n{str(e)}")
             self.status_var.set(f"❌ Ошибка: {str(e)}")
-    
-    def save_files_after_save(self):
-        """Сохраняет прикрепленные файлы после сохранения рекламации"""
-        if not self.rec_id or not self.attached_files:
-            return
-        
-        folder_path = self.get_ncr_folder()
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-        
-        for file_name in self.attached_files:
-            source_path = self.file_paths.get(file_name)
-            if source_path and os.path.exists(source_path):
-                self.copy_file_to_ncr_folder(source_path, file_name)
+            self.root.after(100, self.focus_window)
+
+    def focus_window(self):
+        """Возвращает фокус на текущее окно"""
+        try:
+            self.root.focus_force()
+            self.root.lift()
+            self.root.after(50, lambda: self.root.focus_force())
+            print("✅ Фокус возвращен на окно редактирования")
+        except Exception as e:
+            print(f"Ошибка при возврате фокуса: {e}")
     
     def clear_fields(self):
         """Очищает все поля"""
         for key, var in self.vars.items():
-            var.set('')
+            if key == 'report8d_checkbox':
+                var.set(False)
+            else:
+                var.set('')
         self.description_text.delete('1.0', 'end')
+        self.comments_text.delete('1.0', 'end')
         self.attached_files = []
         self.file_paths = {}
         self.file_listbox.delete(0, tk.END)
@@ -636,11 +871,3 @@ class CreateReclamationWindow:
         self.thumbnail_images = []
         self.render_gallery()
         self.status_var.set("Поля очищены")
-    
-    def open_list_window(self):
-        """Открывает окно со списком рекламаций"""
-        self.root.destroy()
-        from reclamation_list import ReclamationListWindow
-        root = tk.Tk()
-        ReclamationListWindow(root, self.db)
-        root.mainloop()

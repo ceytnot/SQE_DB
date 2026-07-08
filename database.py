@@ -13,7 +13,6 @@ class Database:
         self.Session = None
         
         self._connect()
-        self._init_db()
     
     def _connect(self):
         """Устанавливает соединение с базой данных"""
@@ -30,16 +29,6 @@ class Database:
             print(f"❌ Ошибка подключения к базе: {e}")
             raise
     
-    def _init_db(self):
-        """Инициализирует базу данных и создает таблицы"""
-        try:
-            # ✅ Создаем таблицы через SQLAlchemy ORM
-            Base.metadata.create_all(self.engine)
-            print("✅ Таблицы проверены/созданы")
-            
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации: {e}")
-    
     # ============ ОСНОВНЫЕ МЕТОДЫ (SQLAlchemy ORM) ============
     
     def save_reclamation(self, data):
@@ -48,7 +37,7 @@ class Database:
         try:
             data['date_creation'] = datetime.now()
             
-            # ✅ Создаем объект модели
+            # Создаем объект модели
             reclamation = ReclamationModel(**data)
             session.add(reclamation)
             session.commit()
@@ -72,7 +61,6 @@ class Database:
         """Получает все рекламации (SQLAlchemy ORM)"""
         session = self.Session()
         try:
-            # ✅ ORM запрос
             return session.query(ReclamationModel).order_by(ReclamationModel.id.desc()).all()
         except SQLAlchemyError as e:
             print(f"Ошибка получения данных: {e}")
@@ -84,7 +72,6 @@ class Database:
         """Получает рекламацию по ID (SQLAlchemy ORM)"""
         session = self.Session()
         try:
-            # ✅ ORM запрос
             return session.query(ReclamationModel).filter(ReclamationModel.id == rec_id).first()
         except SQLAlchemyError as e:
             print(f"Ошибка: {e}")
@@ -96,7 +83,6 @@ class Database:
         """Обновляет существующую рекламацию (SQLAlchemy ORM)"""
         session = self.Session()
         try:
-            # ✅ ORM запрос
             reclamation = session.query(ReclamationModel).filter(ReclamationModel.id == rec_id).first()
             
             if reclamation:
@@ -117,7 +103,6 @@ class Database:
         """Удаляет рекламацию по ID (SQLAlchemy ORM)"""
         session = self.Session()
         try:
-            # ✅ ORM запрос
             reclamation = session.query(ReclamationModel).filter(ReclamationModel.id == rec_id).first()
             
             if reclamation:
@@ -139,7 +124,6 @@ class Database:
         """Получает список моделей из таблицы static_data (SQLAlchemy ORM)"""
         session = self.Session()
         try:
-            # ✅ ORM запрос
             models = session.query(StaticData.models_list).filter(
                 StaticData.models_list.isnot(None)
             ).filter(
@@ -160,7 +144,6 @@ class Database:
         """Получает список поставщиков из таблицы static_data (SQLAlchemy ORM)"""
         session = self.Session()
         try:
-            # ✅ ORM запрос
             suppliers = session.query(StaticData.suppliers_list).filter(
                 StaticData.suppliers_list.isnot(None)
             ).filter(
@@ -181,7 +164,6 @@ class Database:
         """Получает список товарных групп из таблицы static_data (SQLAlchemy ORM)"""
         session = self.Session()
         try:
-            # ✅ ORM запрос
             commodities = session.query(StaticData.commodity).filter(
                 StaticData.commodity.isnot(None)
             ).filter(
@@ -202,7 +184,6 @@ class Database:
         """Получает список уникальных создателей из таблицы рекламаций (SQLAlchemy ORM)"""
         session = self.Session()
         try:
-            # ✅ ORM запрос
             creators = session.query(ReclamationModel.creator).filter(
                 ReclamationModel.creator.isnot(None)
             ).filter(

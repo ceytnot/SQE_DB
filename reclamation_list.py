@@ -15,19 +15,22 @@ class ReclamationListWindow:
         self.filter_model = tk.StringVar(value="Все")
         self.filter_supplier = tk.StringVar(value="Все")
         self.filter_creator = tk.StringVar(value="Все")
-        self.filter_commodity = tk.StringVar(value="Все")  # ✅ Новый фильтр
+        self.filter_commodity = tk.StringVar(value="Все")
         self.tree = None
         self.count_label = None
         self.models = []
         self.suppliers = []
         self.creators = []
-        self.commodities = []  # ✅ Список товарных групп
+        self.commodities = []
         
         # Ссылки на виджеты фильтров
         self.model_filter = None
         self.supplier_filter = None
         self.creator_filter = None
-        self.commodity_filter = None  # ✅ Новый виджет
+        self.commodity_filter = None
+        
+        # Список открытых окон редактирования
+        self.edit_windows = []
         
         self.create_widgets()
         self.load_reference_data()
@@ -71,7 +74,7 @@ class ReclamationListWindow:
         self.model_filter.pack(side='left', padx=(0, 20))
         self.model_filter.bind('<<ComboboxSelected>>', lambda e: self.load_data())
         
-        # ✅ Фильтр по товарной группе (Commodity)
+        # Фильтр по товарной группе
         ttk.Label(filter_frame, text="Товарная группа:").pack(side='left', padx=(0, 10))
         self.commodity_filter = ttk.Combobox(filter_frame, textvariable=self.filter_commodity,
                                              values=['Все'], width=20)
@@ -100,16 +103,20 @@ class ReclamationListWindow:
         table_frame = ttk.Frame(self.root, padding=10)
         table_frame.pack(fill='both', expand=True)
         
+        # Колонки
         columns = ('ID', 'Commodity', 'Модель', 'Создатель', 'Деталь', 'Поставщик', 
-                   'Номер PIR', 'Дата', 'Статус')
+                   'Номер PIR', 'Дата', 'Статус', 'Кол-во', 'VIN', 'Дефект', 'Cutoff', '8D')
         
         self.tree = ttk.Treeview(table_frame, columns=columns, show='headings')
         
         # Настройка колонок
-        col_widths = [50, 120, 120, 120, 150, 130, 150, 120, 120]
-        for col, width in zip(columns, col_widths):
+        col_widths = [50, 120, 120, 120, 150, 130, 150, 120, 120, 80, 100, 100, 120, 80]
+        col_anchors = ['center', 'center', 'center', 'center', 'center', 'center', 
+                       'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center']
+        
+        for col, width, anchor in zip(columns, col_widths, col_anchors):
             self.tree.heading(col, text=col)
-            self.tree.column(col, width=width, anchor='center')
+            self.tree.column(col, width=width, anchor=anchor)
         
         # Все ячейки черные
         self.tree.tag_configure('normal', foreground='black')
@@ -133,12 +140,14 @@ class ReclamationListWindow:
         self.count_label.pack(side='left', padx=10)
         
         # Подсказка для пользователя
-        hint_label = ttk.Label(self.root, text="💡 Нажмите на ID для редактирования", 
+        hint_label = ttk.Label(self.root, text="💡 Клик по ID или двойной клик для открытия в новом окне", 
                                font=('Arial', 9), foreground='gray')
         hint_label.pack(side='left', padx=20)
         
-        # Клик по ID → редактирование
+        # Клик по ID → открытие в новом окне
         self.tree.bind('<Button-1>', self.on_click)
+        # Двойной клик по строке → открытие в новом окне
+        self.tree.bind('<Double-Button-1>', self.on_double_click)
         
         # Кнопка "Назад"
         btn_frame = ttk.Frame(self.root, padding=10)
@@ -149,6 +158,11 @@ class ReclamationListWindow:
         
         ttk.Button(btn_frame, text="🗑️ Удалить выбранную", 
                   command=self.delete_selected).pack(side='right', padx=10)
+        
+        # Информация о количестве открытых окон
+        self.windows_count_label = ttk.Label(self.root, text="Открыто окон: 0", 
+                                            font=('Arial', 9), foreground='blue')
+        self.windows_count_label.pack(side='right', padx=10)
     
     def load_reference_data(self):
         """Загружает справочные данные для фильтров"""
@@ -156,7 +170,7 @@ class ReclamationListWindow:
             self.models = self.db.get_models()
             self.suppliers = self.db.get_suppliers()
             self.creators = self.db.get_creators()
-            self.commodities = self.db.get_commodities()  # ✅ Загружаем товарные группы
+            self.commodities = self.db.get_commodities()
             
             if self.model_filter is not None:
                 self.model_filter['values'] = ['Все'] + self.models if self.models else ['Все']
@@ -164,7 +178,7 @@ class ReclamationListWindow:
                 self.supplier_filter['values'] = ['Все'] + self.suppliers if self.suppliers else ['Все']
             if self.creator_filter is not None:
                 self.creator_filter['values'] = ['Все'] + self.creators if self.creators else ['Все']
-            if self.commodity_filter is not None:  # ✅ Обновляем фильтр commodity
+            if self.commodity_filter is not None:
                 self.commodity_filter['values'] = ['Все'] + self.commodities if self.commodities else ['Все']
             
         except Exception as e:
@@ -184,7 +198,7 @@ class ReclamationListWindow:
         self.filter_model.set("Все")
         self.filter_supplier.set("Все")
         self.filter_creator.set("Все")
-        self.filter_commodity.set("Все")  # ✅ Сброс фильтра commodity
+        self.filter_commodity.set("Все")
         self.search_var.set("")
         self.load_data()
     
@@ -198,7 +212,7 @@ class ReclamationListWindow:
         model_filter = self.filter_model.get()
         supplier_filter = self.filter_supplier.get()
         creator_filter = self.filter_creator.get()
-        commodity_filter = self.filter_commodity.get()  # ✅ Фильтр по commodity
+        commodity_filter = self.filter_commodity.get()
         
         # Очищаем таблицу
         for item in self.tree.get_children():
@@ -226,18 +240,23 @@ class ReclamationListWindow:
             if creator_filter != 'Все' and row.creator != creator_filter:
                 continue
             
-            # ✅ Фильтр по товарной группе
+            # Фильтр по товарной группе
             if commodity_filter != 'Все' and row.commodity != commodity_filter:
                 continue
             
             # Поиск
             if search:
-                row_text = ' '.join(str(v).lower() for v in [row.model, row.creator, row.commodity, row.partname, row.supplier, row.full_pir_number] if v)
+                row_text = ' '.join(str(v).lower() for v in [
+                    row.model, row.creator, row.commodity, row.partname, 
+                    row.supplier, row.full_pir_number, row.vin, row.comments,
+                    row.defect
+                ] if v)
                 if search not in row_text:
                     continue
             
             # Форматируем дату
             date_str = row.date_creation.strftime("%Y-%m-%d %H:%M") if row.date_creation else ''
+            cutoff_str = row.cutoff.strftime("%Y-%m-%d") if row.cutoff else ''
             
             # ID с иконкой
             id_with_icon = f"📝 {row.id}"
@@ -251,10 +270,14 @@ class ReclamationListWindow:
                 row.supplier or '',
                 row.full_pir_number or '',
                 date_str,
-                row.ncr_status or ''
+                row.ncr_status or '',
+                row.failure_quantity or '',
+                row.vin or '',
+                row.defect or '',
+                cutoff_str,
+                '✅' if row.report8d_checkbox else '❌'
             ))
             
-            # Применяем черный цвет ко всей строке
             self.tree.item(item, tags=('normal',))
             count += 1
         
@@ -262,7 +285,7 @@ class ReclamationListWindow:
             self.count_label.config(text=f"Всего записей: {count}")
     
     def on_click(self, event):
-        """Обработка клика — редактирование только при клике по ID"""
+        """Обработка клика — открытие в новом окне при клике по ID"""
         if self.tree is None:
             return
         
@@ -275,10 +298,19 @@ class ReclamationListWindow:
         
         # ID — это колонка #1
         if item and column == '#1':
-            self.open_edit_window_from_item(item)
+            self.open_edit_window_new(item)
     
-    def open_edit_window_from_item(self, item):
-        """Открывает окно редактирования по ID из элемента дерева"""
+    def on_double_click(self, event):
+        """Обработка двойного клика — открытие в новом окне"""
+        if self.tree is None:
+            return
+        
+        item = self.tree.identify_row(event.y)
+        if item:
+            self.open_edit_window_new(item)
+    
+    def open_edit_window_new(self, item):
+        """Открывает окно редактирования в новом окне (по клику на ID или двойному клику)"""
         try:
             id_str = self.tree.item(item, 'values')[0]
             rec_id = int(id_str.replace('📝 ', '').strip())
@@ -287,12 +319,44 @@ class ReclamationListWindow:
             messagebox.showerror("Ошибка", f"Не удалось получить ID записи: {e}")
     
     def open_edit_window(self, rec_id):
-        """Открывает окно редактирования рекламации"""
-        self.root.destroy()
+        """Открывает окно редактирования рекламации в новом независимом окне"""
         from create_reclamation import CreateReclamationWindow
-        root = tk.Tk()
-        CreateReclamationWindow(root, self.db, rec_id)
-        root.mainloop()
+        
+        # Создаем новое окно Toplevel
+        edit_root = tk.Toplevel(self.root)
+        edit_root.title(f"Редактирование NCR #{rec_id}")
+        edit_root.state('zoomed')
+        
+        # Создаем экземпляр окна редактирования
+        edit_window = CreateReclamationWindow(edit_root, self.db, rec_id)
+        
+        # Добавляем окно в список открытых
+        self.edit_windows.append(edit_root)
+        self.update_windows_count()
+        
+        # При закрытии окна удаляем его из списка и обновляем данные
+        def on_close():
+            if edit_root in self.edit_windows:
+                self.edit_windows.remove(edit_root)
+            self.update_windows_count()
+            edit_root.destroy()
+            
+            # ✅ Обновляем список рекламаций после закрытия окна редактирования
+            self.load_data()
+        
+        edit_root.protocol("WM_DELETE_WINDOW", on_close)
+        
+        # ✅ Устанавливаем фокус
+        edit_root.focus_force()
+        edit_root.lift()
+        edit_root.after(50, lambda: edit_root.focus_force())
+    
+    def update_windows_count(self):
+        """Обновляет счетчик открытых окон"""
+        if hasattr(self, 'windows_count_label'):
+            # Удаляем закрытые окна из списка
+            self.edit_windows = [w for w in self.edit_windows if w.winfo_exists()]
+            self.windows_count_label.config(text=f"Открыто окон: {len(self.edit_windows)}")
     
     def delete_selected(self):
         """Удаляет выбранную рекламацию"""
@@ -321,15 +385,49 @@ class ReclamationListWindow:
                 messagebox.showerror("Ошибка", result['message'])
     
     def open_create_window(self):
-        """Открывает окно создания рекламации"""
-        self.root.destroy()
+        """Открывает окно создания рекламации в новом независимом окне"""
         from create_reclamation import CreateReclamationWindow
-        root = tk.Tk()
-        CreateReclamationWindow(root, self.db)
-        root.mainloop()
+        
+        # Создаем новое окно Toplevel
+        create_root = tk.Toplevel(self.root)
+        create_root.title("Добавление нового NCR")
+        create_root.state('zoomed')
+        
+        # Создаем экземпляр окна создания
+        create_window = CreateReclamationWindow(create_root, self.db)
+        
+        # Добавляем окно в список открытых
+        self.edit_windows.append(create_root)
+        self.update_windows_count()
+        
+        # При закрытии окна удаляем его из списка и обновляем данные
+        def on_close():
+            if create_root in self.edit_windows:
+                self.edit_windows.remove(create_root)
+            self.update_windows_count()
+            create_root.destroy()
+            
+            # ✅ Обновляем список рекламаций после закрытия окна создания
+            self.load_data()
+        
+        create_root.protocol("WM_DELETE_WINDOW", on_close)
+        
+        # ✅ Устанавливаем фокус
+        create_root.focus_force()
+        create_root.lift()
+        create_root.after(50, lambda: create_root.focus_force())
     
     def go_back(self):
-        """Возврат в окно создания"""
+        """Возврат в главное окно (закрываем список)"""
+        # Закрываем все открытые окна редактирования
+        for window in self.edit_windows:
+            try:
+                if window.winfo_exists():
+                    window.destroy()
+            except:
+                pass
+        self.edit_windows.clear()
+        
         self.root.destroy()
         from create_reclamation import CreateReclamationWindow
         root = tk.Tk()
