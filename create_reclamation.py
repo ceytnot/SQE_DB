@@ -41,21 +41,22 @@ class CreateReclamationWindow:
         # Создаем status_var
         self.status_var = tk.StringVar(value="⏳ Загрузка данных...")
         
-        # Создаем виджеты
-        self.create_widgets()
-        
-        # get data from DB
+        # ✅ Сначала ЗАГРУЖАЕМ ДАННЫЕ (до создания виджетов)
         self.load_reference_data()
-        
-        # Если редактирование — загружаем рекламацию
         if self.edit_mode:
             self.load_reclamation_data()
+        
+        # ✅ ПОТОМ создаем виджеты с уже загруженными данными
+        self.create_widgets()
+        
+        # Если редактирование — загружаем файлы (после создания виджетов)
+        if self.edit_mode:
             self.load_attached_files()
         
         # Настройка горячих клавиш
         self.setup_bindings()
         
-        # ✅ Устанавливаем фокус на окно при создании
+        # ✅ Устанавливаем фокус
         self.root.focus_force()
     
     def setup_styles(self):
@@ -128,7 +129,9 @@ class CreateReclamationWindow:
         ttk.Label(cutoff_frame, text="Cutoff дата:", style="Field.TLabel", 
                   width=20, anchor='e').pack(side='left', padx=(0, 10))
         
-        self.vars['cutoff'] = tk.StringVar()
+        # ✅ Используем уже загруженное значение
+        cutoff_value = self.vars.get('cutoff', tk.StringVar()).get() if 'cutoff' in self.vars else ''
+        self.vars['cutoff'] = tk.StringVar(value=cutoff_value)
         self.cutoff_entry = ttk.Entry(cutoff_frame, textvariable=self.vars['cutoff'], width=30)
         self.cutoff_entry.pack(side='left', fill='x', expand=True)
         
@@ -142,8 +145,9 @@ class CreateReclamationWindow:
         # Пустая метка для выравнивания
         ttk.Label(checkbox_frame, text="", width=20, anchor='e').pack(side='left', padx=(0, 10))
         
-        # Переменная для чекбокса
-        self.vars['report8d_checkbox'] = tk.BooleanVar(value=False)
+        # ✅ Используем уже загруженное значение
+        checkbox_value = self.vars.get('report8d_checkbox', tk.BooleanVar()).get() if 'report8d_checkbox' in self.vars else False
+        self.vars['report8d_checkbox'] = tk.BooleanVar(value=checkbox_value)
         
         # Чекбокс
         self.report8d_checkbox = ttk.Checkbutton(
@@ -160,12 +164,20 @@ class CreateReclamationWindow:
         self.description_text = tk.Text(desc_frame, height=6, font=('Arial', 10), wrap='word')
         self.description_text.pack(fill='both', expand=True)
         
+        # ✅ Если есть описание - вставляем его
+        if hasattr(self, '_description_value') and self._description_value:
+            self.description_text.insert('1.0', self._description_value)
+        
         # Поле для комментариев (многострочное)
         comments_frame = ttk.LabelFrame(left_frame, text="Комментарии", padding=10)
         comments_frame.pack(fill='both', expand=True, pady=(10, 0))
         
         self.comments_text = tk.Text(comments_frame, height=3, font=('Arial', 10), wrap='word')
         self.comments_text.pack(fill='both', expand=True)
+        
+        # ✅ Если есть комментарии - вставляем их
+        if hasattr(self, '_comments_value') and self._comments_value:
+            self.comments_text.insert('1.0', self._comments_value)
         
         # ==================== ПРАВАЯ КОЛОНКА (Галерея) ====================
         
@@ -231,7 +243,7 @@ class CreateReclamationWindow:
         self.canvas.configure(scrollregion=self.canvas.bbox('all'))
     
     def _create_field(self, parent, key, label, widget_type, values):
-        """Создает одно поле ввода"""
+        """Создает одно поле ввода с уже загруженными данными"""
         frame = ttk.Frame(parent)
         frame.pack(fill='x', pady=5)
         
@@ -240,7 +252,9 @@ class CreateReclamationWindow:
                   width=20, anchor='e').pack(side='left', padx=(0, 10))
         
         if widget_type == 'entry':
-            self.vars[key] = tk.StringVar()
+            # ✅ Используем уже загруженное значение
+            default_value = self.vars.get(key, tk.StringVar()).get() if key in self.vars else ''
+            self.vars[key] = tk.StringVar(value=default_value)
             widget = ttk.Entry(frame, textvariable=self.vars[key], width=30)
             widget.pack(side='left', fill='x', expand=True)
             
@@ -248,11 +262,14 @@ class CreateReclamationWindow:
             widget.bind('<FocusOut>', lambda e: self.status_var.set("Готов к работе"))
         
         elif widget_type == 'combobox':
-            self.vars[key] = tk.StringVar()
+            # ✅ Используем уже загруженное значение
+            default_value = self.vars.get(key, tk.StringVar()).get() if key in self.vars else ''
+            self.vars[key] = tk.StringVar(value=default_value)
             widget = ttk.Combobox(frame, textvariable=self.vars[key], 
                                   values=values if values else [], width=28)
             widget.pack(side='left', fill='x', expand=True)
-            widget.set('')
+            if not default_value:
+                widget.set('')
             
             self.comboboxes[key] = widget
             
@@ -303,7 +320,7 @@ class CreateReclamationWindow:
             date_window.geometry(f'{width}x{height}+{x}+{y}')
             
             ttk.Label(date_window, text="Выберите дату cutoff:", 
-                      font=('Arial', 12)).pack(pady=20)
+                    font=('Arial', 12)).pack(pady=20)
             
             cal = DateEntry(
                 date_window, 
@@ -325,9 +342,9 @@ class CreateReclamationWindow:
                         result['date'] = date_str
                         date_window.destroy()
                     else:
-                        messagebox.showwarning("Внимание", "Пожалуйста, выберите дату")
+                        messagebox.showwarning("Внимание", "Пожалуйста, выберите дату", parent=self.root)
                 except Exception as e:
-                    messagebox.showerror("Ошибка", f"Не удалось получить дату: {e}")
+                    messagebox.showerror("Ошибка", f"Не удалось получить дату: {e}", parent=self.root)
             
             def clear_date():
                 result['date'] = ''
@@ -360,16 +377,14 @@ class CreateReclamationWindow:
                 "Информация", 
                 "Для удобного выбора даты установите библиотеку tkcalendar:\n"
                 "pip install tkcalendar\n\n"
-                "Или введите дату вручную в формате ГГГГ-ММ-ДД"
+                "Или введите дату вручную в формате ГГГГ-ММ-ДД",
+                parent=self.root
             )
         except Exception as e:
-            messagebox.showerror("Ошибка", f"Ошибка при выборе даты:\n{str(e)}")
+            messagebox.showerror("Ошибка", f"Ошибка при выборе даты:\n{str(e)}", parent=self.root)
     
     def load_reference_data(self):
         """Загружает справочные данные из базы"""
-        self.status_var.set("⏳ Загрузка данных из базы...")
-        self.root.update()
-        
         try:
             self.models = self.db.get_models()
             self.suppliers = self.db.get_suppliers()
@@ -387,42 +402,35 @@ class CreateReclamationWindow:
             self.status_var.set("⚠️ Используются значения по умолчанию")
     
     def load_reclamation_data(self):
-        """Загружает данные рекламации для редактирования"""
+        """Загружает данные рекламации для редактирования ДО создания виджетов"""
         self.status_var.set(f"⏳ Загрузка рекламации #{self.rec_id}...")
-        self.root.update()
         
         rec = self.db.get_reclamation_by_id(self.rec_id)
         
         if rec:
-            # Основные поля
-            self.vars['model'].set(rec.model or '')
-            self.vars['commodity'].set(rec.commodity or '')
-            self.vars['creator'].set(rec.creator or '')
-            self.vars['partnumber'].set(rec.partnumber or '')
-            self.vars['partname'].set(rec.partname or '')
-            self.vars['supplier'].set(rec.supplier or '')
-            self.vars['full_pir_number'].set(rec.full_pir_number or '')
-            self.vars['repetition'].set(rec.repetition or '')
-            self.vars['ncr_status'].set(rec.ncr_status or '')
+            # ✅ Сохраняем значения в self.vars ДО создания виджетов
+            self.vars['model'] = tk.StringVar(value=rec.model or '')
+            self.vars['commodity'] = tk.StringVar(value=rec.commodity or '')
+            self.vars['creator'] = tk.StringVar(value=rec.creator or '')
+            self.vars['partnumber'] = tk.StringVar(value=rec.partnumber or '')
+            self.vars['partname'] = tk.StringVar(value=rec.partname or '')
+            self.vars['supplier'] = tk.StringVar(value=rec.supplier or '')
+            self.vars['full_pir_number'] = tk.StringVar(value=rec.full_pir_number or '')
+            self.vars['repetition'] = tk.StringVar(value=rec.repetition or '')
+            self.vars['ncr_status'] = tk.StringVar(value=rec.ncr_status or '')
+            self.vars['failure_quantity'] = tk.StringVar(value=str(rec.failure_quantity) if rec.failure_quantity else '')
+            self.vars['vin'] = tk.StringVar(value=rec.vin or '')
+            self.vars['defect'] = tk.StringVar(value=rec.defect or '')
+            self.vars['cutoff'] = tk.StringVar(value=rec.cutoff.strftime('%Y-%m-%d') if rec.cutoff else '')
+            self.vars['report8d_checkbox'] = tk.BooleanVar(value=rec.report8d_checkbox or False)
             
-            # Числовые поля
-            self.vars['failure_quantity'].set(str(rec.failure_quantity) if rec.failure_quantity else '')
-            self.vars['vin'].set(rec.vin or '')
-            
-            # Новые поля
-            self.vars['defect'].set(rec.defect or '')
-            self.vars['cutoff'].set(rec.cutoff.strftime('%Y-%m-%d') if rec.cutoff else '')
-            self.vars['report8d_checkbox'].set(rec.report8d_checkbox or False)
-            
-            # Текстовые поля
-            if rec.description:
-                self.description_text.insert('1.0', rec.description)
-            if rec.comments:
-                self.comments_text.insert('1.0', rec.comments)
+            # ✅ Сохраняем текстовые поля для вставки после создания виджетов
+            self._description_value = rec.description or ''
+            self._comments_value = rec.comments or ''
             
             self.status_var.set(f"✅ Рекламация #{self.rec_id} загружена для редактирования")
         else:
-            messagebox.showerror("Ошибка", f"Рекламация #{self.rec_id} не найдена")
+            messagebox.showerror("Ошибка", f"Рекламация #{self.rec_id} не найдена", parent=self.root)
             self.status_var.set("❌ Ошибка загрузки")
     
     def load_attached_files(self):
@@ -436,7 +444,7 @@ class CreateReclamationWindow:
                 files = os.listdir(folder_path)
                 for file in files:
                     full_path = os.path.join(folder_path, file)
-                    if os.path.isfile(full_path):  # Проверяем, что это файл, а не папка
+                    if os.path.isfile(full_path):
                         self.attached_files.append(file)
                         self.file_paths[file] = full_path
                         self.file_listbox.insert(tk.END, file)
@@ -470,12 +478,11 @@ class CreateReclamationWindow:
             file_name = os.path.basename(file_path)
             
             if file_name in self.attached_files:
-                messagebox.showwarning("Внимание", f"Файл '{file_name}' уже добавлен")
+                messagebox.showwarning("Внимание", f"Файл '{file_name}' уже добавлен", parent=self.root)
                 continue
             
             self.attached_files.append(file_name)
             
-            # Если рекламация уже сохранена - сразу копируем в папку
             if self.rec_id:
                 dest_path = self._copy_file_to_ncr_folder(file_path, file_name)
                 if dest_path:
@@ -483,7 +490,6 @@ class CreateReclamationWindow:
                 else:
                     self.file_paths[file_name] = file_path
             else:
-                # Если рекламация еще не сохранена - сохраняем исходный путь
                 self.file_paths[file_name] = file_path
             
             self.file_listbox.insert(tk.END, file_name)
@@ -502,11 +508,9 @@ class CreateReclamationWindow:
         
         dest_path = os.path.join(folder_path, file_name)
         
-        # Если файл уже в папке рекламации - возвращаем его путь
         if os.path.normpath(source_path) == os.path.normpath(dest_path):
             return dest_path
         
-        # Если файл уже существует в папке назначения - возвращаем путь к нему
         if os.path.exists(dest_path):
             return dest_path
         
@@ -516,7 +520,7 @@ class CreateReclamationWindow:
             return dest_path
         except Exception as e:
             print(f"❌ Ошибка копирования: {e}")
-            messagebox.showerror("Ошибка", f"Не удалось скопировать файл:\n{e}")
+            messagebox.showerror("Ошибка", f"Не удалось скопировать файл:\n{e}", parent=self.root)
             return None
     
     def save_files_after_save(self):
@@ -528,7 +532,6 @@ class CreateReclamationWindow:
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
         
-        # Обновляем пути к файлам
         for file_name in list(self.attached_files):
             source_path = self.file_paths.get(file_name)
             if not source_path or not os.path.exists(source_path):
@@ -536,7 +539,6 @@ class CreateReclamationWindow:
             
             dest_path = os.path.join(folder_path, file_name)
             
-            # Если файл еще не в папке рекламации - копируем
             if os.path.normpath(source_path) != os.path.normpath(dest_path):
                 if not os.path.exists(dest_path):
                     try:
@@ -624,21 +626,21 @@ class CreateReclamationWindow:
     def open_file(self, file_path):
         """Открывает файл в приложении по умолчанию"""
         if not file_path or not os.path.exists(file_path):
-            messagebox.showerror("Ошибка", f"Файл не найден:\n{file_path}")
+            messagebox.showerror("Ошибка", f"Файл не найден:\n{file_path}", parent=self.root)
             return
         
         try:
             os.startfile(file_path)
             self.status_var.set(f"📂 Открыт файл: {os.path.basename(file_path)}")
         except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось открыть файл:\n{e}")
+            messagebox.showerror("Ошибка", f"Не удалось открыть файл:\n{e}", parent=self.root)
     
     def remove_file(self, file_name):
         """Удаляет файл по имени"""
         if file_name not in self.attached_files:
             return
         
-        if not messagebox.askyesno("Подтверждение", f"Удалить файл '{file_name}'?"):
+        if not messagebox.askyesno("Подтверждение", f"Удалить файл '{file_name}'?", parent=self.root):
             return
         
         self.attached_files.remove(file_name)
@@ -691,7 +693,7 @@ class CreateReclamationWindow:
         """Удаляет выбранный файл из списка"""
         selection = self.file_listbox.curselection()
         if not selection:
-            messagebox.showwarning("Внимание", "Выберите файл для удаления")
+            messagebox.showwarning("Внимание", "Выберите файл для удаления", parent=self.root)
             return
         
         index = selection[0]
@@ -701,14 +703,14 @@ class CreateReclamationWindow:
     def open_files_folder(self):
         """Открывает папку с файлами рекламации"""
         if not self.rec_id:
-            messagebox.showinfo("Информация", "Сначала сохраните рекламацию")
+            messagebox.showinfo("Информация", "Сначала сохраните рекламацию", parent=self.root)
             return
         
         folder_path = self.get_ncr_folder()
         if os.path.exists(folder_path):
             os.startfile(folder_path)
         else:
-            messagebox.showinfo("Информация", "Папка с файлами еще не создана")
+            messagebox.showinfo("Информация", "Папка с файлами еще не создана", parent=self.root)
     
     def update_comboboxes(self):
         """Обновляет значения в комбобоксах"""
@@ -730,6 +732,7 @@ class CreateReclamationWindow:
     def refresh_reference_data(self):
         """Обновляет справочные данные из базы"""
         self.load_reference_data()
+        self.update_comboboxes()
         self.status_var.set("✅ Справочники обновлены")
     
     def setup_bindings(self):
@@ -752,24 +755,22 @@ class CreateReclamationWindow:
                 else:
                     data[key] = var.get().strip()
             
-            # Обработка числового поля failure_quantity
             if data.get('failure_quantity'):
                 try:
                     data['failure_quantity'] = int(data['failure_quantity'])
                 except ValueError:
-                    messagebox.showwarning("Внимание", "Поле 'Количество отказов' должно быть числом")
+                    messagebox.showwarning("Внимание", "Поле 'Количество отказов' должно быть числом", parent=self.root)
                     self.status_var.set("❌ Ошибка: неверный формат количества отказов")
                     self.focus_window()
                     return
             else:
                 data['failure_quantity'] = None
             
-            # Обработка даты cutoff
             if data.get('cutoff'):
                 try:
                     data['cutoff'] = datetime.strptime(data['cutoff'], '%Y-%m-%d')
                 except ValueError:
-                    messagebox.showwarning("Внимание", "Неверный формат даты cutoff. Используйте ГГГГ-ММ-ДД")
+                    messagebox.showwarning("Внимание", "Неверный формат даты cutoff. Используйте ГГГГ-ММ-ДД", parent=self.root)
                     self.status_var.set("❌ Ошибка: неверный формат даты")
                     self.focus_window()
                     return
@@ -790,27 +791,23 @@ class CreateReclamationWindow:
                     'supplier': 'Поставщик'
                 }
                 msg = "Заполните обязательные поля:\n" + "\n".join(f"• {field_names[f]}" for f in missing)
-                messagebox.showwarning("Внимание", msg)
+                messagebox.showwarning("Внимание", msg, parent=self.root)
                 self.status_var.set("❌ Ошибка: не заполнены обязательные поля")
                 self.focus_window()
                 return
             
             if self.edit_mode:
-                # Редактирование существующей рекламации
                 result = self.db.update_reclamation(self.rec_id, data)
                 if result['success']:
                     self.save_files_after_save()
-                    messagebox.showinfo("Успех", f"✅ Рекламация #{self.rec_id} обновлена!")
+                    messagebox.showinfo("Успех", f"✅ Рекламация #{self.rec_id} обновлена!", parent=self.root)
                     self.status_var.set(f"✅ Рекламация #{self.rec_id} обновлена")
-                    
-                    # ✅ Возвращаем фокус через задержку после закрытия messagebox
                     self.root.after(100, self.focus_window)
                 else:
-                    messagebox.showerror("Ошибка", f"❌ {result['message']}")
+                    messagebox.showerror("Ошибка", f"❌ {result['message']}", parent=self.root)
                     self.status_var.set(f"❌ Ошибка: {result['message']}")
                     self.root.after(100, self.focus_window)
             else:
-                # Создание новой рекламации
                 result = self.db.save_reclamation(data)
                 
                 if result['success']:
@@ -820,38 +817,34 @@ class CreateReclamationWindow:
                     self.db.update_reclamation(self.rec_id, {'full_pir_number': full_pir})
                     self.save_files_after_save()
                     
-                    messagebox.showinfo("Успех", f"✅ Рекламация сохранена!\nID: {self.rec_id}\nНомер: {full_pir}")
+                    messagebox.showinfo("Успех", f"✅ Рекламация сохранена!\nID: {self.rec_id}\nНомер: {full_pir}", parent=self.root)
                     self.status_var.set(f"✅ Рекламация #{self.rec_id} сохранена")
                     
-                    # Переключаемся в режим редактирования
                     self.edit_mode = True
                     self.root.title(f"Редактирование NCR #{self.rec_id}")
                     
-                    # Очищаем поля для создания новой записи
                     self.clear_fields()
                     self.refresh_reference_data()
                     
                     self.status_var.set(f"✅ Рекламация #{self.rec_id} сохранена. Можете создать новую или редактировать текущую.")
-                    
-                    # ✅ Возвращаем фокус через задержку после закрытия messagebox
                     self.root.after(100, self.focus_window)
                 else:
-                    messagebox.showerror("Ошибка", f"❌ {result['message']}")
+                    messagebox.showerror("Ошибка", f"❌ {result['message']}", parent=self.root)
                     self.status_var.set(f"❌ Ошибка: {result['message']}")
                     self.root.after(100, self.focus_window)
             
         except Exception as e:
-            messagebox.showerror("Ошибка", f"❌ Ошибка при сохранении:\n{str(e)}")
+            messagebox.showerror("Ошибка", f"❌ Ошибка при сохранении:\n{str(e)}", parent=self.root)
             self.status_var.set(f"❌ Ошибка: {str(e)}")
             self.root.after(100, self.focus_window)
-
+    
     def focus_window(self):
         """Возвращает фокус на текущее окно"""
         try:
-            self.root.focus_force()
-            self.root.lift()
-            self.root.after(50, lambda: self.root.focus_force())
-            print("✅ Фокус возвращен на окно редактирования")
+            if self.root.winfo_exists():
+                self.root.focus_force()
+                self.root.lift()
+                self.root.after(50, lambda: self.root.focus_force() if self.root.winfo_exists() else None)
         except Exception as e:
             print(f"Ошибка при возврате фокуса: {e}")
     
