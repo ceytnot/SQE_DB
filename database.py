@@ -37,7 +37,6 @@ class Database:
         try:
             data['date_creation'] = datetime.now()
             
-            # Создаем объект модели
             reclamation = ReclamationModel(**data)
             session.add(reclamation)
             session.commit()
@@ -196,6 +195,67 @@ class Database:
             
         except SQLAlchemyError as e:
             print(f"Ошибка получения создателей: {e}")
+            return []
+        finally:
+            session.close()
+    
+    def get_parts_disposal(self):
+        """Получает список вариантов утилизации деталей из таблицы static_data (SQLAlchemy ORM)"""
+        session = self.Session()
+        try:
+            parts_disposal = session.query(StaticData.parts_disposal).filter(
+                StaticData.parts_disposal.isnot(None)
+            ).filter(
+                StaticData.parts_disposal != ''
+            ).order_by(
+                StaticData.parts_disposal
+            ).all()
+            
+            return [row[0] for row in parts_disposal] or []
+            
+        except SQLAlchemyError as e:
+            print(f"Ошибка получения списка утилизации деталей: {e}")
+            return []
+        finally:
+            session.close()
+    
+    def get_repetition_list(self):
+        """Получает список вариантов повторяемости из таблицы static_data (SQLAlchemy ORM)"""
+        session = self.Session()
+        try:
+            repetition = session.query(StaticData.repetition).filter(
+                StaticData.repetition.isnot(None)
+            ).filter(
+                StaticData.repetition != ''
+            ).order_by(
+                StaticData.repetition
+            ).all()
+            
+            return [row[0] for row in repetition] or []
+            
+        except SQLAlchemyError as e:
+            print(f"Ошибка получения списка повторяемости: {e}")
+            return []
+        finally:
+            session.close()
+    
+    # ✅ НОВЫЙ МЕТОД: Получение списка дефектов из поля defect_name
+    def get_defect_names(self):
+        """Получает список дефектов из таблицы static_data (SQLAlchemy ORM)"""
+        session = self.Session()
+        try:
+            defects = session.query(StaticData.defect_name).filter(
+                StaticData.defect_name.isnot(None)
+            ).filter(
+                StaticData.defect_name != ''
+            ).order_by(
+                StaticData.defect_name
+            ).all()
+            
+            return [row[0] for row in defects] or []
+            
+        except SQLAlchemyError as e:
+            print(f"Ошибка получения списка дефектов: {e}")
             return []
         finally:
             session.close()

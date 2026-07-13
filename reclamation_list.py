@@ -32,9 +32,51 @@ class ReclamationListWindow:
         # Список открытых окон редактирования
         self.edit_windows = []
         
+        # ✅ Словарь для хранения цветовых индикаторов
+        self.status_colors = {
+            'Open': '🟢',           # Зеленый
+            'In Progress': '🟡',    # Желтый
+            'Under Investigation': '🟠',  # Оранжевый
+            'Closed': '🔵',         # Синий
+            'Rejected': '🔴',       # Красный
+            'Implemented': '🟣'     # Фиолетовый
+        }
+        
         self.create_widgets()
         self.load_reference_data()
         self.load_data()
+        
+        # ✅ Добавляем обработчик закрытия окна
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+    
+    def on_closing(self):
+        """Обработчик закрытия окна с подтверждением"""
+        active_windows = [w for w in self.edit_windows if w.winfo_exists()]
+        
+        if active_windows:
+            result = messagebox.askyesno(
+                "Подтверждение закрытия",
+                f"У вас открыто {len(active_windows)} окно(а) редактирования.\n\n"
+                "При закрытии списка все окна редактирования будут закрыты.\n"
+                "Вы уверены, что хотите закрыть окно?",
+                parent=self.root
+            )
+        else:
+            result = messagebox.askyesno(
+                "Подтверждение закрытия",
+                "Вы уверены, что хотите закрыть список рекламаций?",
+                parent=self.root
+            )
+        
+        if result:
+            for window in active_windows:
+                try:
+                    if window.winfo_exists():
+                        window.destroy()
+                except:
+                    pass
+            self.edit_windows.clear()
+            self.root.destroy()
     
     def create_widgets(self):
         # Верхняя панель
@@ -99,29 +141,42 @@ class ReclamationListWindow:
         ttk.Button(filter_frame, text="🔄 Сбросить фильтры", 
                   command=self.reset_filters).pack(side='left', padx=10)
         
+        # ✅ Легенда статусов
+        legend_frame = ttk.Frame(filter_frame)
+        legend_frame.pack(side='right', padx=10)
+        
+        ttk.Label(legend_frame, text="Легенда:", font=('Arial', 9)).pack(side='left', padx=(0, 5))
+        
+        for status, color in self.status_colors.items():
+            ttk.Label(legend_frame, text=f"{color} {status}", 
+                     font=('Arial', 8)).pack(side='left', padx=3)
+        
         # Таблица
         table_frame = ttk.Frame(self.root, padding=10)
         table_frame.pack(fill='both', expand=True)
         
-        # Колонки
         columns = ('ID', 'Commodity', 'Модель', 'Создатель', 'Деталь', 'Поставщик', 
-                   'Номер PIR', 'Дата', 'Статус', 'Кол-во', 'VIN', 'Дефект', 'Cutoff', '8D')
+                   'Номер PIR', 'Дата', 'Статус', 'Кол-во', 'VIN', 'Дефект', 'Утилизация','Cutoff', '8D')
         
         self.tree = ttk.Treeview(table_frame, columns=columns, show='headings')
         
-        # Настройка колонок
-        col_widths = [50, 120, 120, 120, 150, 130, 150, 120, 120, 80, 100, 100, 120, 80]
+        col_widths = [50, 120, 120, 120, 150, 130, 150, 120, 150, 80, 100, 100, 100, 120, 80]
         col_anchors = ['center', 'center', 'center', 'center', 'center', 'center', 
-                       'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center']
+                       'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center']
         
         for col, width, anchor in zip(columns, col_widths, col_anchors):
             self.tree.heading(col, text=col)
             self.tree.column(col, width=width, anchor=anchor)
         
-        # Все ячейки черные
-        self.tree.tag_configure('normal', foreground='black')
+        # ✅ Настройка цветов для строк в зависимости от статуса
+        self.tree.tag_configure('Open', foreground='#2e7d32')  # Темно-зеленый
+        self.tree.tag_configure('In Progress', foreground='#f57f17')  # Темно-желтый
+        self.tree.tag_configure('Under Investigation', foreground='#e65100')  # Темно-оранжевый
+        self.tree.tag_configure('Closed', foreground='#0d47a1')  # Темно-синий
+        self.tree.tag_configure('Rejected', foreground='#b71c1c')  # Темно-красный
+        self.tree.tag_configure('Implemented', foreground='#4a148c')  # Темно-фиолетовый
+        self.tree.tag_configure('default', foreground='black')
         
-        # Скроллбары
         scroll_y = ttk.Scrollbar(table_frame, orient='vertical', command=self.tree.yview)
         scroll_x = ttk.Scrollbar(table_frame, orient='horizontal', command=self.tree.xview)
         
@@ -134,22 +189,17 @@ class ReclamationListWindow:
         table_frame.grid_rowconfigure(0, weight=1)
         table_frame.grid_columnconfigure(0, weight=1)
         
-        # Количество записей
         self.count_label = ttk.Label(self.root, text="Всего записей: 0", 
                                      font=('Arial', 10), padding=5)
         self.count_label.pack(side='left', padx=10)
         
-        # Подсказка для пользователя
         hint_label = ttk.Label(self.root, text="💡 Клик по ID или двойной клик для открытия в новом окне", 
                                font=('Arial', 9), foreground='gray')
         hint_label.pack(side='left', padx=20)
         
-        # Клик по ID → открытие в новом окне
         self.tree.bind('<Button-1>', self.on_click)
-        # Двойной клик по строке → открытие в новом окне
         self.tree.bind('<Double-Button-1>', self.on_double_click)
         
-        # Кнопка "Назад"
         btn_frame = ttk.Frame(self.root, padding=10)
         btn_frame.pack(fill='x')
         
@@ -159,7 +209,6 @@ class ReclamationListWindow:
         ttk.Button(btn_frame, text="🗑️ Удалить выбранную", 
                   command=self.delete_selected).pack(side='right', padx=10)
         
-        # Информация о количестве открытых окон
         self.windows_count_label = ttk.Label(self.root, text="Открыто окон: 0", 
                                             font=('Arial', 9), foreground='blue')
         self.windows_count_label.pack(side='right', padx=10)
@@ -214,37 +263,24 @@ class ReclamationListWindow:
         creator_filter = self.filter_creator.get()
         commodity_filter = self.filter_commodity.get()
         
-        # Очищаем таблицу
         for item in self.tree.get_children():
             self.tree.delete(item)
         
-        # Получаем данные
         rows = self.db.get_all_reclamations()
         count = 0
         
-        # Фильтруем и отображаем
         for row in rows:
-            # Фильтр по статусу
             if status_filter != 'Все' and row.ncr_status != status_filter:
                 continue
-            
-            # Фильтр по модели
             if model_filter != 'Все' and row.model != model_filter:
                 continue
-            
-            # Фильтр по поставщику
             if supplier_filter != 'Все' and row.supplier != supplier_filter:
                 continue
-            
-            # Фильтр по создателю
             if creator_filter != 'Все' and row.creator != creator_filter:
                 continue
-            
-            # Фильтр по товарной группе
             if commodity_filter != 'Все' and row.commodity != commodity_filter:
                 continue
             
-            # Поиск
             if search:
                 row_text = ' '.join(str(v).lower() for v in [
                     row.model, row.creator, row.commodity, row.partname, 
@@ -254,12 +290,12 @@ class ReclamationListWindow:
                 if search not in row_text:
                     continue
             
-            # Форматируем дату
             date_str = row.date_creation.strftime("%Y-%m-%d %H:%M") if row.date_creation else ''
             cutoff_str = row.cutoff.strftime("%Y-%m-%d") if row.cutoff else ''
-            
-            # ID с иконкой
             id_with_icon = f"📝 {row.id}"
+            
+            # ✅ Добавляем цветной индикатор статуса
+            status_display = f"{self.status_colors.get(row.ncr_status, '⚪')} {row.ncr_status or ''}"
             
             item = self.tree.insert('', 'end', values=(
                 id_with_icon,
@@ -270,15 +306,22 @@ class ReclamationListWindow:
                 row.supplier or '',
                 row.full_pir_number or '',
                 date_str,
-                row.ncr_status or '',
+                status_display,  # ✅ Статус с цветным кружком
                 row.failure_quantity or '',
                 row.vin or '',
                 row.defect or '',
+                row.parts_disposal or '',
                 cutoff_str,
                 '✅' if row.report8d_checkbox else '❌'
             ))
             
-            self.tree.item(item, tags=('normal',))
+            # ✅ Применяем цвет тега в зависимости от статуса
+            status = row.ncr_status or 'default'
+            if status in ['Open', 'In Progress', 'Under Investigation', 'Closed', 'Rejected', 'Implemented']:
+                self.tree.item(item, tags=(status,))
+            else:
+                self.tree.item(item, tags=('default',))
+            
             count += 1
         
         if self.count_label:
@@ -296,7 +339,6 @@ class ReclamationListWindow:
         column = self.tree.identify_column(event.x)
         item = self.tree.identify_row(event.y)
         
-        # ID — это колонка #1
         if item and column == '#1':
             self.open_edit_window_new(item)
     
@@ -310,7 +352,7 @@ class ReclamationListWindow:
             self.open_edit_window_new(item)
     
     def open_edit_window_new(self, item):
-        """Открывает окно редактирования в новом окне (по клику на ID или двойному клику)"""
+        """Открывает окно редактирования в новом окне"""
         try:
             id_str = self.tree.item(item, 'values')[0]
             rec_id = int(id_str.replace('📝 ', '').strip())
@@ -322,31 +364,24 @@ class ReclamationListWindow:
         """Открывает окно редактирования рекламации в новом независимом окне"""
         from create_reclamation import CreateReclamationWindow
         
-        # Создаем новое окно Toplevel
         edit_root = tk.Toplevel(self.root)
         edit_root.title(f"Редактирование NCR #{rec_id}")
         edit_root.state('zoomed')
         
-        # Создаем экземпляр окна редактирования
         edit_window = CreateReclamationWindow(edit_root, self.db, rec_id)
         
-        # Добавляем окно в список открытых
         self.edit_windows.append(edit_root)
         self.update_windows_count()
         
-        # При закрытии окна удаляем его из списка и обновляем данные
         def on_close():
             if edit_root in self.edit_windows:
                 self.edit_windows.remove(edit_root)
             self.update_windows_count()
             edit_root.destroy()
-            
-            # ✅ Обновляем список рекламаций после закрытия окна редактирования
             self.load_data()
         
         edit_root.protocol("WM_DELETE_WINDOW", on_close)
         
-        # ✅ Устанавливаем фокус
         edit_root.focus_force()
         edit_root.lift()
         edit_root.after(50, lambda: edit_root.focus_force())
@@ -354,7 +389,6 @@ class ReclamationListWindow:
     def update_windows_count(self):
         """Обновляет счетчик открытых окон"""
         if hasattr(self, 'windows_count_label'):
-            # Удаляем закрытые окна из списка
             self.edit_windows = [w for w in self.edit_windows if w.winfo_exists()]
             self.windows_count_label.config(text=f"Открыто окон: {len(self.edit_windows)}")
     
@@ -388,38 +422,30 @@ class ReclamationListWindow:
         """Открывает окно создания рекламации в новом независимом окне"""
         from create_reclamation import CreateReclamationWindow
         
-        # Создаем новое окно Toplevel
         create_root = tk.Toplevel(self.root)
         create_root.title("Добавление нового NCR")
         create_root.state('zoomed')
         
-        # Создаем экземпляр окна создания
         create_window = CreateReclamationWindow(create_root, self.db)
         
-        # Добавляем окно в список открытых
         self.edit_windows.append(create_root)
         self.update_windows_count()
         
-        # При закрытии окна удаляем его из списка и обновляем данные
         def on_close():
             if create_root in self.edit_windows:
                 self.edit_windows.remove(create_root)
             self.update_windows_count()
             create_root.destroy()
-            
-            # ✅ Обновляем список рекламаций после закрытия окна создания
             self.load_data()
         
         create_root.protocol("WM_DELETE_WINDOW", on_close)
         
-        # ✅ Устанавливаем фокус
         create_root.focus_force()
         create_root.lift()
         create_root.after(50, lambda: create_root.focus_force())
     
     def go_back(self):
         """Возврат в главное окно (закрываем список)"""
-        # Закрываем все открытые окна редактирования
         for window in self.edit_windows:
             try:
                 if window.winfo_exists():

@@ -21,6 +21,9 @@ class CreateReclamationWindow:
         self.models = []
         self.suppliers = []
         self.commodities = []
+        self.parts_disposal = []
+        self.repetition_list = []
+        self.defects_list = []
         
         # Словарь для хранения комбобоксов
         self.comboboxes = {}
@@ -102,7 +105,7 @@ class CreateReclamationWindow:
         
         # ==================== ЛЕВАЯ КОЛОНКА ====================
         
-        # Определяем все поля в левой колонке
+        # ✅ Определяем все поля в левой колонке
         left_fields = [
             ('model', 'Модель *', 'combobox', self.models),
             ('commodity', 'Товарная группа', 'combobox', self.commodities),
@@ -111,11 +114,12 @@ class CreateReclamationWindow:
             ('partname', 'Наименование детали', 'entry', None),
             ('supplier', 'Поставщик *', 'combobox', self.suppliers),
             ('full_pir_number', 'Номер PIR', 'entry', None),
-            ('repetition', 'Повторяемость', 'entry', None),
+            ('repetition', 'Повторяемость', 'combobox', self.repetition_list),
             ('ncr_status', 'Статус NCR', 'combobox', config.NCR_STATUSES),
             ('failure_quantity', 'Количество отказов', 'entry', None),
             ('vin', 'VIN номер', 'entry', None),
-            ('defect', 'Дефект', 'entry', None),
+            ('defect', 'Дефект', 'combobox', self.defects_list),
+            ('parts_disposal', 'Утилизация деталей', 'combobox', self.parts_disposal),
         ]
         
         # Создаем поля на левой панели
@@ -129,7 +133,6 @@ class CreateReclamationWindow:
         ttk.Label(cutoff_frame, text="Cutoff дата:", style="Field.TLabel", 
                   width=20, anchor='e').pack(side='left', padx=(0, 10))
         
-        # ✅ Используем уже загруженное значение
         cutoff_value = self.vars.get('cutoff', tk.StringVar()).get() if 'cutoff' in self.vars else ''
         self.vars['cutoff'] = tk.StringVar(value=cutoff_value)
         self.cutoff_entry = ttk.Entry(cutoff_frame, textvariable=self.vars['cutoff'], width=30)
@@ -142,14 +145,11 @@ class CreateReclamationWindow:
         checkbox_frame = ttk.Frame(left_frame)
         checkbox_frame.pack(fill='x', pady=5)
         
-        # Пустая метка для выравнивания
         ttk.Label(checkbox_frame, text="", width=20, anchor='e').pack(side='left', padx=(0, 10))
         
-        # ✅ Используем уже загруженное значение
         checkbox_value = self.vars.get('report8d_checkbox', tk.BooleanVar()).get() if 'report8d_checkbox' in self.vars else False
         self.vars['report8d_checkbox'] = tk.BooleanVar(value=checkbox_value)
         
-        # Чекбокс
         self.report8d_checkbox = ttk.Checkbutton(
             checkbox_frame,
             text="✅ Report 8D требуется",
@@ -164,7 +164,6 @@ class CreateReclamationWindow:
         self.description_text = tk.Text(desc_frame, height=6, font=('Arial', 10), wrap='word')
         self.description_text.pack(fill='both', expand=True)
         
-        # ✅ Если есть описание - вставляем его
         if hasattr(self, '_description_value') and self._description_value:
             self.description_text.insert('1.0', self._description_value)
         
@@ -175,7 +174,6 @@ class CreateReclamationWindow:
         self.comments_text = tk.Text(comments_frame, height=3, font=('Arial', 10), wrap='word')
         self.comments_text.pack(fill='both', expand=True)
         
-        # ✅ Если есть комментарии - вставляем их
         if hasattr(self, '_comments_value') and self._comments_value:
             self.comments_text.insert('1.0', self._comments_value)
         
@@ -213,7 +211,6 @@ class CreateReclamationWindow:
         gallery_frame = ttk.Frame(right_frame)
         gallery_frame.pack(side='left', fill='both', expand=True)
         
-        # Canvas с прокруткой для галереи
         canvas_frame = ttk.Frame(gallery_frame)
         canvas_frame.pack(fill='both', expand=True)
         
@@ -224,7 +221,6 @@ class CreateReclamationWindow:
         self.canvas.pack(side='left', fill='both', expand=True)
         scrollbar.pack(side='right', fill='y')
         
-        # Внутренний фрейм для миниатюр
         self.gallery_frame = ttk.Frame(self.canvas)
         self.canvas.create_window((0, 0), window=self.gallery_frame, anchor='nw')
         
@@ -249,24 +245,29 @@ class CreateReclamationWindow:
         
         label_text = label + (' *' if '*' in label else '')
         ttk.Label(frame, text=label_text + ':', style="Field.TLabel", 
-                  width=20, anchor='e').pack(side='left', padx=(0, 10))
+                width=20, anchor='e').pack(side='left', padx=(0, 10))
         
         if widget_type == 'entry':
-            # ✅ Используем уже загруженное значение
             default_value = self.vars.get(key, tk.StringVar()).get() if key in self.vars else ''
             self.vars[key] = tk.StringVar(value=default_value)
             widget = ttk.Entry(frame, textvariable=self.vars[key], width=30)
             widget.pack(side='left', fill='x', expand=True)
             
-            widget.bind('<FocusIn>', lambda e, k=label: self.status_var.set(f"Введите {k.lower()}"))
+            # ✅ Валидация для VIN
+            if key == 'vin':
+                vcmd = (self.root.register(self._validate_vin), '%P')
+                widget.config(validate='key', validatecommand=vcmd)
+                widget.bind('<FocusIn>', lambda e: self.status_var.set("Введите VIN (17 символов, буквы и цифры)"))
+            else:
+                widget.bind('<FocusIn>', lambda e, k=label: self.status_var.set(f"Введите {k.lower()}"))
+            
             widget.bind('<FocusOut>', lambda e: self.status_var.set("Готов к работе"))
         
         elif widget_type == 'combobox':
-            # ✅ Используем уже загруженное значение
             default_value = self.vars.get(key, tk.StringVar()).get() if key in self.vars else ''
             self.vars[key] = tk.StringVar(value=default_value)
             widget = ttk.Combobox(frame, textvariable=self.vars[key], 
-                                  values=values if values else [], width=28)
+                                values=values if values else [], width=28)
             widget.pack(side='left', fill='x', expand=True)
             if not default_value:
                 widget.set('')
@@ -299,6 +300,22 @@ class CreateReclamationWindow:
             matches = [c for c in self.commodities if current_text.lower() in c.lower()]
             if matches:
                 widget['values'] = matches
+        elif 'parts_disposal' in str(widget):
+            matches = [p for p in self.parts_disposal if current_text.lower() in p.lower()]
+            if matches:
+                widget['values'] = matches
+        elif 'repetition' in str(widget):
+            matches = [r for r in self.repetition_list if current_text.lower() in r.lower()]
+            if matches:
+                widget['values'] = matches
+        elif 'defect' in str(widget):
+            matches = [d for d in self.defects_list if current_text.lower() in d.lower()]
+            if matches:
+                widget['values'] = matches
+
+    def _validate_vin(self, text):
+        """Ограничивает ввод VIN до 17 символов (буквы и цифры)"""
+        return len(text) <= 17 and (not text or text.isalnum())
     
     def choose_cutoff_date(self):
         """Открывает диалог выбора даты для cutoff"""
@@ -389,15 +406,21 @@ class CreateReclamationWindow:
             self.models = self.db.get_models()
             self.suppliers = self.db.get_suppliers()
             self.commodities = self.db.get_commodities()
+            self.parts_disposal = self.db.get_parts_disposal()
+            self.repetition_list = self.db.get_repetition_list()
+            self.defects_list = self.db.get_defect_names()
             
             self.update_comboboxes()
-            self.status_var.set(f"✅ Загружено: {len(self.models)} моделей, {len(self.suppliers)} поставщиков, {len(self.commodities)} товарных групп")
+            self.status_var.set(f"✅ Загружено: {len(self.models)} моделей, {len(self.suppliers)} поставщиков, {len(self.commodities)} товарных групп, {len(self.parts_disposal)} вариантов утилизации, {len(self.repetition_list)} вариантов повторяемости, {len(self.defects_list)} дефектов")
             
         except Exception as e:
             print(f"❌ Ошибка загрузки справочных данных: {e}")
             self.models = config.MODELS
             self.suppliers = config.SUPPLIERS
             self.commodities = []
+            self.parts_disposal = []
+            self.repetition_list = []
+            self.defects_list = []
             self.update_comboboxes()
             self.status_var.set("⚠️ Используются значения по умолчанию")
     
@@ -408,7 +431,6 @@ class CreateReclamationWindow:
         rec = self.db.get_reclamation_by_id(self.rec_id)
         
         if rec:
-            # ✅ Сохраняем значения в self.vars ДО создания виджетов
             self.vars['model'] = tk.StringVar(value=rec.model or '')
             self.vars['commodity'] = tk.StringVar(value=rec.commodity or '')
             self.vars['creator'] = tk.StringVar(value=rec.creator or '')
@@ -421,10 +443,10 @@ class CreateReclamationWindow:
             self.vars['failure_quantity'] = tk.StringVar(value=str(rec.failure_quantity) if rec.failure_quantity else '')
             self.vars['vin'] = tk.StringVar(value=rec.vin or '')
             self.vars['defect'] = tk.StringVar(value=rec.defect or '')
+            self.vars['parts_disposal'] = tk.StringVar(value=rec.parts_disposal or '')
             self.vars['cutoff'] = tk.StringVar(value=rec.cutoff.strftime('%Y-%m-%d') if rec.cutoff else '')
             self.vars['report8d_checkbox'] = tk.BooleanVar(value=rec.report8d_checkbox or False)
             
-            # ✅ Сохраняем текстовые поля для вставки после создания виджетов
             self._description_value = rec.description or ''
             self._comments_value = rec.comments or ''
             
@@ -728,6 +750,21 @@ class CreateReclamationWindow:
             self.comboboxes['commodity']['values'] = self.commodities
             if not self.comboboxes['commodity'].get():
                 self.comboboxes['commodity'].set('')
+        
+        if 'parts_disposal' in self.comboboxes:
+            self.comboboxes['parts_disposal']['values'] = self.parts_disposal
+            if not self.comboboxes['parts_disposal'].get():
+                self.comboboxes['parts_disposal'].set('')
+        
+        if 'repetition' in self.comboboxes:
+            self.comboboxes['repetition']['values'] = self.repetition_list
+            if not self.comboboxes['repetition'].get():
+                self.comboboxes['repetition'].set('')
+        
+        if 'defect' in self.comboboxes:
+            self.comboboxes['defect']['values'] = self.defects_list
+            if not self.comboboxes['defect'].get():
+                self.comboboxes['defect'].set('')
     
     def refresh_reference_data(self):
         """Обновляет справочные данные из базы"""
@@ -754,6 +791,11 @@ class CreateReclamationWindow:
                     data[key] = var.get()
                 else:
                     data[key] = var.get().strip()
+
+            if data.get('vin') and len(data['vin']) > 17:
+                messagebox.showwarning("Ошибка", "VIN не может быть длиннее 17 символов!", parent=self.root)
+                self.focus_window()
+                return
             
             if data.get('failure_quantity'):
                 try:
