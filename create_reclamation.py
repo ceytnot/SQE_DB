@@ -88,8 +88,10 @@ class CreateReclamationWindow:
         btn_frame = ttk.Frame(top_frame)
         btn_frame.pack(side='right')
         
-        ttk.Button(btn_frame, text="🔄 Обновить справочники", 
-                  command=self.refresh_reference_data).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="🔄 Обновить справочники", command=self.refresh_reference_data).pack(side='left', padx=5)
+        
+        # ✅ Добавляем кнопку экспорта в PowerPoint
+        ttk.Button(btn_frame, text="📊 Экспорт в PPT", command=self.export_to_pptx).pack(side='left', padx=5)
         
         # Контейнер для полей ввода (две колонки)
         fields_container = ttk.Frame(main_frame)
@@ -906,3 +908,102 @@ class CreateReclamationWindow:
         self.thumbnail_images = []
         self.render_gallery()
         self.status_var.set("Поля очищены")
+    
+    def export_to_pptx(self):
+        """Экспортирует данные рекламации в PowerPoint по шаблону"""
+        if not self.rec_id:
+            messagebox.showwarning("Внимание", "Сначала сохраните рекламацию!", parent=self.root)
+            return
+        
+        try:
+            from pptx import Presentation
+            
+            # Путь к шаблону
+            template_path = r"X:\SQE_DB\Templates\sqe_template.pptx"
+            
+            # Проверяем существование шаблона
+            if not os.path.exists(template_path):
+                messagebox.showerror(
+                    "Ошибка", 
+                    f"Шаблон не найден по пути:\n{template_path}\n\n"
+                    "Пожалуйста, проверьте путь к шаблону.",
+                    parent=self.root
+                )
+                return
+            
+            # Загружаем данные рекламации
+            rec = self.db.get_reclamation_by_id(self.rec_id)
+            if not rec:
+                messagebox.showerror("Ошибка", f"Рекламация #{self.rec_id} не найдена", parent=self.root)
+                return
+            
+            # Загружаем шаблон
+            prs = Presentation(template_path)
+            
+            # Обходим все слайды и заменяем заполнители
+            for slide in prs.slides:
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text:
+                        shape.text = self._replace_placeholders(shape.text, rec)
+            
+            # Путь для сохранения
+            output_dir = r"X:\SQE_DB\Reports"
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_path = os.path.join(output_dir, f"NCR_{rec.id}_{timestamp}.pptx")
+            
+            # Сохраняем презентацию
+            prs.save(output_path)
+            
+            messagebox.showinfo(
+                "Успех", 
+                f"✅ Презентация создана!\n\n"
+                f"Файл: {output_path}",
+                parent=self.root
+            )
+            
+            # Предлагаем открыть файл
+            if messagebox.askyesno("Открыть файл", "Открыть созданную презентацию?", parent=self.root):
+                os.startfile(output_path)
+            
+        except ImportError:
+            messagebox.showerror(
+                "Ошибка", 
+                "Библиотека python-pptx не установлена.\n\n"
+                "Установите ее командой:\n"
+                "pip install python-pptx",
+                parent=self.root
+            )
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Ошибка при создании презентации:\n{str(e)}", parent=self.root)
+
+    def _replace_placeholders(self, text, rec):
+        """Заменяет заполнители в тексте на данные из рекламации"""
+        replacements = {
+            '{{id}}': str(rec.id),
+            '{{model}}': rec.model or '',
+            '{{commodity}}': rec.commodity or '',
+            '{{creator}}': rec.creator or '',
+            '{{partnumber}}': rec.partnumber or '',
+            '{{partname}}': rec.partname or '',
+            '{{supplier}}': rec.supplier or '',
+            '{{full_pir_number}}': rec.full_pir_number or '',
+            '{{repetition}}': rec.repetition or '',
+            '{{ncr_status}}': rec.ncr_status or '',
+            '{{failure_quantity}}': str(rec.failure_quantity) if rec.failure_quantity else '',
+            '{{vin}}': rec.vin or '',
+            '{{defect}}': rec.defect or '',
+            '{{parts_disposal}}': rec.parts_disposal or '',
+            '{{description}}': rec.description or '',
+            '{{comments}}': rec.comments or '',
+            '{{date_creation}}': rec.date_creation.strftime('%Y-%m-%d %H:%M') if rec.date_creation else '',
+            '{{cutoff}}': rec.cutoff.strftime('%Y-%m-%d') if rec.cutoff else '',
+            '{{report8d}}': '✅ Да' if rec.report8d_checkbox else '❌ Нет',
+        }
+        
+        for placeholder, value in replacements.items():
+            text = text.replace(placeholder, value)
+        
+        return text
