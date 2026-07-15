@@ -34,3 +34,5 @@ NCR_STATUSES = [
     "Rejected",
     "Implemented"
 ]
+
+NCR_TEMPLATE_PATH = r"X:\SQE_DB\Templates\sqe_template.pptx"

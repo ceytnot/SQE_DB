@@ -5,6 +5,8 @@ from datetime import datetime
 import os
 import shutil
 import config
+from config import NCR_TEMPLATE_PATH
+from pptx import Presentation
 
 class CreateReclamationWindow:
     """NCR window to create and modify reclamation"""
@@ -915,56 +917,40 @@ class CreateReclamationWindow:
             messagebox.showwarning("Внимание", "Сначала сохраните рекламацию!", parent=self.root)
             return
         
-        try:
-            from pptx import Presentation
-            
-            # Путь к шаблону
-            template_path = r"X:\SQE_DB\Templates\sqe_template.pptx"
-            
-            # Проверяем существование шаблона
-            if not os.path.exists(template_path):
+        try:            
+            if not os.path.exists(NCR_TEMPLATE_PATH):
                 messagebox.showerror(
                     "Ошибка", 
-                    f"Шаблон не найден по пути:\n{template_path}\n\n"
+                    f"Шаблон не найден по пути:\n{NCR_TEMPLATE_PATH}\n\n"
                     "Пожалуйста, проверьте путь к шаблону.",
                     parent=self.root
                 )
                 return
             
-            # Загружаем данные рекламации
             rec = self.db.get_reclamation_by_id(self.rec_id)
             if not rec:
                 messagebox.showerror("Ошибка", f"Рекламация #{self.rec_id} не найдена", parent=self.root)
                 return
             
-            # Загружаем шаблон
-            prs = Presentation(template_path)
+            print(f"🔍 full_pir_number из базы: '{rec.full_pir_number}'")
             
-            # Обходим все слайды и заменяем заполнители
+            prs = Presentation(NCR_TEMPLATE_PATH)
+            
             for slide in prs.slides:
                 for shape in slide.shapes:
-                    if hasattr(shape, "text") and shape.text:
-                        shape.text = self._replace_placeholders(shape.text, rec)
+                    if hasattr(shape, "text_frame"):
+                        self._replace_placeholders(shape, rec)
             
-            # Путь для сохранения
             output_dir = r"X:\SQE_DB\Reports"
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
             
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_path = os.path.join(output_dir, f"NCR_{rec.id}_{timestamp}.pptx")
-            
-            # Сохраняем презентацию
             prs.save(output_path)
             
-            messagebox.showinfo(
-                "Успех", 
-                f"✅ Презентация создана!\n\n"
-                f"Файл: {output_path}",
-                parent=self.root
-            )
+            messagebox.showinfo("Успех", f"✅ Презентация создана!\n\nФайл: {output_path}", parent=self.root)
             
-            # Предлагаем открыть файл
             if messagebox.askyesno("Открыть файл", "Открыть созданную презентацию?", parent=self.root):
                 os.startfile(output_path)
             
@@ -972,15 +958,65 @@ class CreateReclamationWindow:
             messagebox.showerror(
                 "Ошибка", 
                 "Библиотека python-pptx не установлена.\n\n"
-                "Установите ее командой:\n"
                 "pip install python-pptx",
                 parent=self.root
             )
         except Exception as e:
-            messagebox.showerror("Ошибка", f"Ошибка при создании презентации:\n{str(e)}", parent=self.root)
+            messagebox.showerror("Ошибка", f"{str(e)}", parent=self.root)
 
-    def _replace_placeholders(self, text, rec):
-        """Заменяет заполнители в тексте на данные из рекламации"""
+    def _replace_placeholders(self, shape, rec):
+        """Заменяет заполнители в тексте на данные из рекламации, сохраняя форматирование"""
+        if not hasattr(shape, "text_frame"):
+            return
+        
+        tf = shape.text_frame
+        
+        for paragraph in tf.paragraphs:
+            full_text = ""
+            runs = list(paragraph.runs)
+            
+            for run in runs:
+                full_text += run.text
+            
+            if '{{' in full_text and '}}' in full_text:
+                first_run = runs[0] if runs else None
+                font_name = None
+                font_size = None
+                font_color = None
+                font_bold = None
+                font_italic = None
+                
+                if first_run:
+                    font_name = first_run.font.name
+                    font_size = first_run.font.size
+                    if first_run.font.color and first_run.font.color.type == 1:
+                        font_color = first_run.font.color.rgb
+                    font_bold = first_run.font.bold
+                    font_italic = first_run.font.italic
+                
+                new_text = self._replace_text(full_text, rec)
+                
+                for run in runs:
+                    run.text = ""
+                
+                if first_run:
+                    first_run.text = new_text
+                    if font_name:
+                        first_run.font.name = font_name
+                    if font_size:
+                        first_run.font.size = font_size
+                    if font_color:
+                        first_run.font.color.rgb = font_color
+                    if font_bold is not None:
+                        first_run.font.bold = font_bold
+                    if font_italic is not None:
+                        first_run.font.italic = font_italic
+                else:
+                    new_run = paragraph.add_run()
+                    new_run.text = new_text
+
+    def _replace_text(self, text, rec):
+        """Заменяет заполнители в строке текста на данные из рекламации"""
         replacements = {
             '{{id}}': str(rec.id),
             '{{model}}': rec.model or '',
@@ -1004,6 +1040,8 @@ class CreateReclamationWindow:
         }
         
         for placeholder, value in replacements.items():
+            if placeholder in text:
+                print(f"🔄 Замена '{placeholder}' → '{value}'")
             text = text.replace(placeholder, value)
         
         return text
